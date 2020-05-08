@@ -1,17 +1,18 @@
 module TestContextVariables
 
+using Documenter: doctest
 using ContextVariables
-using ContextVariables: with_variables_impl
+using ContextVariables: with_context_impl
 using Test
 
-const cvar1 = ContextVar(:cvar1, 42)
-const cvar2 = ContextVar{Int}(:cvar2)
-const cvar3 = ContextVar(:cvar3)
+@contextvar global cvar1 = 42
+@contextvar global cvar2::Int
+@contextvar global cvar3
 
 @testset "typed, w/ default" begin
     ok = Ref(0)
     @sync @async begin
-        with_variables() do
+        with_context() do
             @test cvar1[] == 42
             cvar1[] = 0
             @test cvar1[] == 0
@@ -20,7 +21,7 @@ const cvar3 = ContextVar(:cvar3)
                 @test cvar1[] == 0
                 ok[] += 1
             end
-            with_variables(cvar1 => 1) do
+            with_context(cvar1 => 1) do
                 @test cvar1[] == 1
                 ok[] += 1
             end
@@ -32,7 +33,7 @@ const cvar3 = ContextVar(:cvar3)
 end
 
 @testset "typed, w/o default" begin
-    with_variables_impl() do
+    with_context_impl() do
         @test_throws InexactError cvar2[] = 0.5
         @test_throws KeyError cvar2[]
         cvar2[] = 1.0
@@ -41,7 +42,7 @@ end
 end
 
 @testset "untyped, w/o default" begin
-    with_variables_impl() do
+    with_context_impl() do
         cvar3[] = 1
         @test cvar3[] === 1
         cvar3[] = 'a'
@@ -50,11 +51,17 @@ end
 end
 
 @testset "show" begin
-    @test endswith(sprint(show, ContextVar(:x, 42)), "ContextVar(:x, 42)")
-    @test endswith(sprint(show, ContextVar{Int}(:x)), "ContextVar{$Int}(:x)")
-    @test endswith(sprint(show, ContextVar(:x)), "ContextVar(:x)")
-    @test endswith(sprint(show, ContextVar{Union{Missing,Int64}}(:x, 1)),
-                   "ContextVar{Union{Missing, Int64}}(:x, 1)")
+    @test endswith(sprint(show, cvar1), "ContextVar(:cvar1, 42)")
+    @test endswith(sprint(show, cvar2), "ContextVar{$Int}(:cvar2)")
+    @test endswith(sprint(show, cvar3), "ContextVar(:cvar3)")
+    @test endswith(
+        sprint(show, @contextvar local x::Union{Missing,Int64} = 1),
+        "ContextVar{Union{Missing, Int64}}(:x, 1)",
+    )
+end
+
+@testset "doctest" begin
+    doctest(ContextVariables; manual = false)
 end
 
 end  # module
