@@ -7,4 +7,4 @@ makedocs(
     modules = [ContextVariables],
 )
 
-deploydocs(; repo = "github.com/tkf/ContextVariables.jl")
+deploydocs(; repo = "github.com/tkf/ContextVariables.jl", push_preview = true)
