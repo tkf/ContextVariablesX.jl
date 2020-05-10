@@ -317,8 +317,9 @@ macro contextvar(ex0)
         key = genkey(__module__, ex)
     else
         # Creating a UUID at macro expansion time because:
-        # * It would be a memory leak because context variable storage can be
-        #   filled with UUIDs created at run-time.
+        # * It would be a memory leak it were created at run-time because
+        #   context variable storage can be filled with UUIDs created at
+        #   run-time.
         # * Creating it at run-time is doable with function-based interface like
         #   `ContextVar(:name, default)`.
         key = uuid4()
@@ -418,7 +419,7 @@ function with_context_impl(f, ::Nothing)
     end
 end
 
-# Not using `set_context!` so that `snapshot` an an input makes sense.
+# Not using `set_context!` so that `snapshot` as an input makes sense.
 """
     set_context(var1 => value1, var2 => value2, ...)
     set_context(pairs)
