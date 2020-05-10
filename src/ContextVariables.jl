@@ -2,9 +2,18 @@ module ContextVariables
 
 # Re-exporting `Base` functions so that Documenter knows what's public:
 export @contextvar,
-    ContextVar, delete!, get, getindex, set!, set_context, setindex!, with_context
+    ContextVar,
+    delete!,
+    get,
+    getindex,
+    reset_context,
+    set!,
+    set_context,
+    setindex!,
+    snapshot_context,
+    with_context
 
-using IRTools: @dynamo, IR, recurse!
+using IRTools: @dynamo, IR, IRTools, recurse!
 using UUIDs: UUID, uuid4, uuid5
 
 const CVKEY = UUID("30c48ab6-eb66-4e00-8274-c879a8246cdb")
@@ -14,6 +23,20 @@ function _ContextVar end
 # `ContextVar` object itself does not hold any data (except the
 # default value).  It is actually just a key into the task-local
 # context storage.
+"""
+    ContextVar{T}
+
+Context variable type.  This is the type of the object `var` created by
+[`@contextvar var`](@ref @contextvar).  This acts as a reference to the
+value stored in a task-local.  The macro `@contextvar` is the only public
+API to construct this object.
+
+!!! warning
+
+    It is unspecified if this type is concrete or not. It may be
+    changed to an abstract type and/or include more type parameters in
+    the future.
+"""
 struct ContextVar{T}
     name::Symbol
     _module::Module
@@ -75,6 +98,12 @@ function Base.show(io::IO, ::MIME"text/plain", var::ContextVar)
     print(io, var._module, '.', var.name, " :: ContextVar")
     if get(io, :compact, false) === false
         print(io, " [", var.key, ']')
+        if get(var) === nothing
+            print(io, " (not assigned)")
+        else
+            print(io, " => ")
+            show(IOContext(io, :compact => true), MIME"text/plain"(), var[])
+        end
     end
 end
 
@@ -125,6 +154,9 @@ struct _NoValue end
 
 """
     get(var::ContextVar{T}) -> Union{Some{T},Nothing}
+
+Return `Some(value)` if `value` is assigned to `var`.  Return `nothing` if
+unassigned.
 """
 function Base.get(var::ContextVar{T}) where {T}
     ctx = get_task_ctxvars()
@@ -142,7 +174,9 @@ function Base.get(var::ContextVar{T}) where {T}
 end
 
 """
-    getindex(var::ContextVar{T}) -> T
+    getindex(var::ContextVar{T}) -> value::T
+
+Return the `value` assigned to `var`.  Throw a `KeyError` if unassigned.
 """
 function Base.getindex(var::ContextVar{T}) where {T}
     maybe = get(var)
@@ -238,31 +272,6 @@ julia> X[] = 1;
 
 julia> X[]
 1
-
-julia> delete!(X);
-```
-
-Use [`get`](@ref) and [`set!`](@ref) to handle context variables that may not be
-assigned:
-
-```julia global_vars
-julia> get(X) === nothing
-true
-
-julia> set!(X, Some(2));
-
-julia> get(X)
-Some(2)
-```
-
-This is useful to rollback a context variable without knowing the current value
-of it:
-
-```julia
-old = get(x)
-x[] = some_value
-do_something()
-set!(x, old)  # rollback `x` to the previous state (may be not be assigned)
 ```
 """
 macro contextvar(ex0)
@@ -327,8 +336,11 @@ end
     return ir
 end
 
-# A hack to avoid "this intrinsic must be compiled to be called"
-propagate_variables(f::typeof(schedule), args...) = f(args...)
+# Workaround IRTools bugs(?):
+propagate_variables(f::Union{
+    typeof(schedule),  # "this intrinsic must be compiled to be called"
+    typeof(Base.sync_end),  # "IRTools.Inner.Undefined()"
+}, args...) = f(args...)
 
 function propagate_variables(::Type{<:Task}, f, args...)
     vars = get_task_ctxvars()
@@ -345,7 +357,10 @@ end
 
 Run `f` in a context with given values set to the context variables.  Variables
 specified in this form are rolled back to the original value when `with_context`
-returns.  It act like a dynamically scoped `let`.
+returns.  It act like a dynamically scoped `let`.  If `nothing` is passed as
+a value, corresponding context variable is cleared; i.e., it is unassigned or
+takes the default value.  Use `Some(value)` to set `value` if `value` can be
+`nothing`.
 
     with_context(f, nothing)
 
@@ -354,7 +369,7 @@ when `with_context` returns.
 
 Note that
 
-```
+```julia
 var2[] = value2
 with_context(var1 => value1) do
     @show var2[]  # shows value2
@@ -365,7 +380,7 @@ end
 
 and
 
-```
+```julia
 var2[] = value2
 with_context(nothing) do
     var1[] = value1
@@ -382,8 +397,6 @@ function with_context(f, args...)
         propagate_variables(f)
     end
 end
-
-propagate_variables(::typeof(with_context), args...) = with_context_impl(args...)
 
 function with_context_impl(f, kvs::Pair{<:ContextVar}...)
     orig = map(((k, _),) -> k => get(k), kvs)
@@ -409,16 +422,16 @@ end
 """
     set_context(var1 => value1, var2 => value2, ...)
     set_context(pairs)
-    set_context(snapshot)
+    set_context(snapshot::ContextSnapshot)
 
 Equivalent to `var1[] = value1`, `var2[] = value2`, and so on.  The second form
-expect an iterable of pairs of context variable and values.
-
-This form is more efficient than setting individual context variables
-sequentially.
+expect an iterable of pairs of context variable and values.  This function is
+more efficient than setting individual context variables sequentially.  Like
+[`with_context`](@ref), `nothing` value means to clear the context variable
+and `Some` is always unwrapped.
 
 A "snapshot" of the context returned from [`snapshot_context`](@ref) can
-be specified as an input.
+be specified as an input (the third form).
 
 # Examples
 ```jldoctest
@@ -459,7 +472,7 @@ end
 # This requires storing UUID-to-ContextVar mapping somewhere.
 
 """
-    snapshot_context() -> snapshot
+    snapshot_context() -> snapshot::ContextSnapshot
 
 Get a snapshot of a context that can be passed to [`reset_context`](@ref) to
 rewind all changes in the context variables.
@@ -467,7 +480,10 @@ rewind all changes in the context variables.
 snapshot_context() = ContextSnapshot(get_task_ctxvars())
 
 """
-    reset_context(snapshot)
+    reset_context(snapshot::ContextSnapshot)
+
+Rest the entire context of the current task to the state at which `snapshot`
+is obtained via [`snapshot_context`](@ref).
 """
 reset_context(snapshot::ContextSnapshot) = set_task_ctxvars(snapshot.vars)
 set_context(snapshot::ContextSnapshot) = set_context(snapshot.vars)
