@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>ContextVariables.jl · ContextVariables</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">ContextVariables</span></div><form class="docs-search" action="search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>ContextVariables.jl</a><ul class="internal"><li><a class="tocitem" href="#Tutorial-1"><span>Tutorial</span></a></li><li><a class="tocitem" href="#Reference-1"><span>Reference</span></a></li></ul></li><li><a class="tocitem" href="internals/">Internals</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>ContextVariables.jl</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>ContextVariables.jl</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/tkf/ContextVariables.jl/blob/master/docs/src/index.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="ContextVariables.jl-1"><a class="docs-heading-anchor" href="#ContextVariables.jl-1">ContextVariables.jl</a><a class="docs-heading-anchor-permalink" href="#ContextVariables.jl-1" title="Permalink"></a></h1><p>ContextVariables.jl is heavily inspired by <a href="https://docs.python.org/3/library/contextvars.html"><code>contextvars</code></a> in Python (see also <a href="https://www.python.org/dev/peps/pep-0567/">PEP 567</a>).</p><h2 id="Tutorial-1"><a class="docs-heading-anchor" href="#Tutorial-1">Tutorial</a><a class="docs-heading-anchor-permalink" href="#Tutorial-1" title="Permalink"></a></h2><p>Context variables can be used to manage task-local states that are inherited to child tasks.  Context variables can be created by <a href="#ContextVariables.@contextvar-Tuple{Any}"><code>@contextvar</code></a>:</p><pre><code class="language-julia">@contextvar cvar1           # untyped, without default
+@contextvar cvar2 = 1       # typed (Int), with default
+@contextvar cvar3::Int      # typed, without default</code></pre><p>Note that running above code in REPL will throw an error because this form work only within a package namespace.  To play with <code>@contextvar</code> in REPL, you can prefix the variable name with <code>global</code>:</p><pre><code class="language-julia-repl">julia&gt; @contextvar global x;</code></pre><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p><code>@contextvar global</code> should be used only for interactive exploration, quick scripting, and testing.  Using <code>@contextvar global</code> inside packages make it impossible to work with serialization-based libraries such as Distributed.</p></div></div><p>The value of context variable can be get and set with the indexing syntax <code>[]</code></p><pre><code class="language-julia-repl">julia&gt; x[] = 1;
+
+julia&gt; x[]
+1</code></pre><p>The value can be unset with <code>delete!</code>:</p><pre><code class="language-julia-repl">julia&gt; delete!(x);
+
+julia&gt; x[]
+ERROR: KeyError: key ContextVar(:x) not found</code></pre><p>Use <a href="#Base.get-Union{Tuple{ContextVar{T}}, Tuple{T}} where T"><code>get</code></a> and <a href="#ContextVariables.set!-Union{Tuple{T}, Tuple{ContextVar{T},Union{Nothing, Some}}} where T"><code>set!</code></a> to handle context variables that may not be assigned:</p><pre><code class="language-julia-repl">julia&gt; get(x)  # returns `nothing`
+
+julia&gt; set!(x, Some(1));  # equivalent to `x[] = 1`
+
+julia&gt; get(x)
+Some(1)
+
+julia&gt; set!(x, nothing);  # equivalent to `delete!(x)`</code></pre><p>This is useful to rollback a context variable without knowing the current value of it:</p><pre><code class="language-julia">old = get(x)
+x[] = some_value
+do_something()
+set!(x, old)  # rollback `x` to the previous state (may not be assigned)</code></pre><p><a href="#ContextVariables.with_context-Tuple{Any,Vararg{Any,N} where N}"><code>with_context</code></a> can be used to set multiple context variables at once, run a function in this context, and then rollback them to the original state:</p><pre><code class="language-julia-repl">julia&gt; @contextvar global y = 1;
+       @contextvar global z::Int;
+
+julia&gt; function demo1()
+           @show x[]
+           @show y[]
+           @show z[]
+       end;
+
+julia&gt; z[] = 100;
+
+julia&gt; with_context(demo1, x =&gt; :a, z =&gt; 0);
+x[] = :a
+y[] = 1
+z[] = 0
+
+julia&gt; z[]
+100</code></pre><p>Note that <code>with_context(f, x =&gt; nothing, ...)</code> clears the value of <code>x</code>, rather than setting the value of <code>x</code> to <code>nothing</code>.  Use <code>Some(nothing)</code> set <code>nothing</code>.  Similar caution applies to <code>set_context</code> (see below).</p><pre><code class="language-julia-repl">julia&gt; with_context(x =&gt; Some(nothing), y =&gt; nothing, z =&gt; nothing) do
+           @show x[]
+           @show y[]
+           @show get(z)
+       end
+x[] = nothing
+y[] = 1
+get(z) = nothing</code></pre><p>Thus,</p><pre><code class="language-julia">with_context(x =&gt; Some(a), y =&gt; Some(b), z =&gt; Some(c)) do
+    ...
+end</code></pre><p>can be used considered as a dynamically scoped version of</p><pre><code class="language-julia">let x′ = a, y′ = b, z′ = c
+    ...
+end</code></pre><p>Note that <code>with_context(f, var =&gt; value, ...)</code> does not rollback the context variables that are not specified by the input:</p><pre><code class="language-julia-repl">julia&gt; with_context(x =&gt; :a) do
+           z[] = 0
+       end;
+
+julia&gt; z[]
+0</code></pre><p>Use <code>with_context(f, nothing)</code> to create an empty context and rollback the entire context to the state just before calling it.</p><pre><code class="language-julia-repl">julia&gt; with_context(nothing) do
+           z[] = 123
+       end;
+
+julia&gt; z[]
+0</code></pre><p>Since setting multiple context variables at once is more efficient than setting them sequentially, <a href="#ContextVariables.set_context-Tuple{Vararg{Pair{#s16,B} where B where #s16&lt;:ContextVar,N} where N}"><code>set_context</code></a> can be used to set multiple context variables in the current context in one go:</p><pre><code class="language-julia-repl">julia&gt; set_context(x =&gt; 1, y =&gt; 2, z =&gt; 3);
+
+julia&gt; (x[], y[], z[])
+(1, 2, 3)</code></pre><p>A handle to the snapshot of the current context can be obtained with <a href="#ContextVariables.snapshot_context-Tuple{}"><code>snapshot_context</code></a>.  It can be later restored by <a href="#ContextVariables.reset_context-Tuple{ContextVariables.ContextSnapshot}"><code>reset_context</code></a>.</p><pre><code class="language-julia-repl">julia&gt; x[]
+1
+
+julia&gt; snapshot = snapshot_context();
+
+julia&gt; x[] = 123;
+
+julia&gt; reset_context(snapshot);
+
+julia&gt; x[]
+1</code></pre><p>Note that the context is inherited to the child task when the task is created. Thus, changes made after <code>@async</code>/<code>@spawn</code> or changes made in other tasks are not observable:</p><pre><code class="language-julia">julia&gt; function demo2()
+           x0 = x[]
+           x[] += 1
+           (x0, x[])
+       end
+
+julia&gt; with_context(x =&gt; 1) do
+           @sync begin
+               t1 = @async demo2()
+               t2 = @async demo2()
+               result = demo2()
+               [result, fetch(t1), fetch(t2)]
+           end
+       end
+3-element Array{Tuple{Int64,Int64},1}:
+ (1, 2)
+ (1, 2)
+ (1, 2)</code></pre><p>In particular, manipulating context variables using the public API is always data-race-free.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>If a context variable holds a mutable value, it is a data-race to mutate the <em>value</em> when other threads are reading it.</p><pre><code class="language-julia">@contextvar local x = [1]  # mutable value
+@sync begin
+    @spawn begin
+        value = x[]        # not a data-race
+        push!(value, 2)    # data-race
+    end
+    @spawn begin
+        value = x[]        # not a data-race
+        @show last(value)  # data-race
+    end
+end</code></pre></div></div><h2 id="Reference-1"><a class="docs-heading-anchor" href="#Reference-1">Reference</a><a class="docs-heading-anchor-permalink" href="#Reference-1" title="Permalink"></a></h2><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.ContextVar" href="#ContextVariables.ContextVar"><code>ContextVariables.ContextVar</code></a> — <span class="docstring-category">Type</span></header><section><div><pre><code class="language-julia">ContextVar{T}</code></pre><p>Context variable type.  This is the type of the object <code>var</code> created by <a href="#ContextVariables.@contextvar-Tuple{Any}"><code>@contextvar var</code></a>.  This acts as a reference to the value stored in a task-local.  The macro <code>@contextvar</code> is the only public API to construct this object.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>It is unspecified if this type is concrete or not. It may be changed to an abstract type and/or include more type parameters in the future.</p></div></div></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L26-L39">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.get-Union{Tuple{ContextVar{T}}, Tuple{T}} where T" href="#Base.get-Union{Tuple{ContextVar{T}}, Tuple{T}} where T"><code>Base.get</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">get(var::ContextVar{T}) -&gt; Union{Some{T},Nothing}</code></pre><p>Return <code>Some(value)</code> if <code>value</code> is assigned to <code>var</code>.  Return <code>nothing</code> if unassigned.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L155-L160">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="Base.getindex-Union{Tuple{ContextVar{T}}, Tuple{T}} where T" href="#Base.getindex-Union{Tuple{ContextVar{T}}, Tuple{T}} where T"><code>Base.getindex</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">getindex(var::ContextVar{T}) -&gt; value::T</code></pre><p>Return the <code>value</code> assigned to <code>var</code>.  Throw a <code>KeyError</code> if unassigned.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L176-L180">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.reset_context-Tuple{ContextVariables.ContextSnapshot}" href="#ContextVariables.reset_context-Tuple{ContextVariables.ContextSnapshot}"><code>ContextVariables.reset_context</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">reset_context(snapshot::ContextSnapshot)</code></pre><p>Rest the entire context of the current task to the state at which <code>snapshot</code> is obtained via <a href="#ContextVariables.snapshot_context-Tuple{}"><code>snapshot_context</code></a>.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L482-L487">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.set!-Union{Tuple{T}, Tuple{ContextVar{T},Union{Nothing, Some}}} where T" href="#ContextVariables.set!-Union{Tuple{T}, Tuple{ContextVar{T},Union{Nothing, Some}}} where T"><code>ContextVariables.set!</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">set!(var::ContextVar, Some(value))
+set!(var::ContextVar, nothing)</code></pre><p>Set the value of context variable <code>var</code> to <code>value</code> or delete it.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L190-L195">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.set_context-Tuple{Vararg{Pair{#s16,B} where B where #s16&lt;:ContextVar,N} where N}" href="#ContextVariables.set_context-Tuple{Vararg{Pair{#s16,B} where B where #s16&lt;:ContextVar,N} where N}"><code>ContextVariables.set_context</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">set_context(var1 =&gt; value1, var2 =&gt; value2, ...)
+set_context(pairs)
+set_context(snapshot::ContextSnapshot)</code></pre><p>Equivalent to <code>var1[] = value1</code>, <code>var2[] = value2</code>, and so on.  The second form expect an iterable of pairs of context variable and values.  This function is more efficient than setting individual context variables sequentially.  Like <a href="#ContextVariables.with_context-Tuple{Any,Vararg{Any,N} where N}"><code>with_context</code></a>, <code>nothing</code> value means to clear the context variable and <code>Some</code> is always unwrapped.</p><p>A &quot;snapshot&quot; of the context returned from <a href="#ContextVariables.snapshot_context-Tuple{}"><code>snapshot_context</code></a> can be specified as an input (the third form).</p><p><strong>Examples</strong></p><pre><code class="language-julia-repl">julia&gt; using ContextVariables
+
+julia&gt; @contextvar global x
+       @contextvar global y;
+
+julia&gt; set_context(x =&gt; 1, y =&gt; 2)
+
+julia&gt; x[]
+1
+
+julia&gt; y[]
+2
+
+julia&gt; set_context([x =&gt; 10, y =&gt; 20])
+
+julia&gt; x[]
+10
+
+julia&gt; y[]
+20</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L422-L459">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.snapshot_context-Tuple{}" href="#ContextVariables.snapshot_context-Tuple{}"><code>ContextVariables.snapshot_context</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">snapshot_context() -&gt; snapshot::ContextSnapshot</code></pre><p>Get a snapshot of a context that can be passed to <a href="#ContextVariables.reset_context-Tuple{ContextVariables.ContextSnapshot}"><code>reset_context</code></a> to rewind all changes in the context variables.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L474-L479">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.with_context-Tuple{Any,Vararg{Any,N} where N}" href="#ContextVariables.with_context-Tuple{Any,Vararg{Any,N} where N}"><code>ContextVariables.with_context</code></a> — <span class="docstring-category">Method</span></header><section><div><pre><code class="language-julia">with_context(f, var1 =&gt; value1, var2 =&gt; value2, ...)
+with_context(f, pairs)</code></pre><p>Run <code>f</code> in a context with given values set to the context variables.  Variables specified in this form are rolled back to the original value when <code>with_context</code> returns.  It act like a dynamically scoped <code>let</code>.  If <code>nothing</code> is passed as a value, corresponding context variable is cleared; i.e., it is unassigned or takes the default value.  Use <code>Some(value)</code> to set <code>value</code> if <code>value</code> can be <code>nothing</code>.</p><pre><code class="language-none">with_context(f, nothing)</code></pre><p>Run <code>f</code> in a new empty context.  All variables are rewind to the original values when <code>with_context</code> returns.</p><p>Note that</p><pre><code class="language-julia">var2[] = value2
+with_context(var1 =&gt; value1) do
+    @show var2[]  # shows value2
+    var3[] = value3
+end
+@show var3[]  # shows value3</code></pre><p>and</p><pre><code class="language-julia">var2[] = value2
+with_context(nothing) do
+    var1[] = value1
+    @show var2[]  # shows default (or throws)
+    var3[] = value3
+end
+@show var3[]  # does not show value3</code></pre><p>are not equivalent.</p></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L354-L394">source</a></section></article><article class="docstring"><header><a class="docstring-binding" id="ContextVariables.@contextvar-Tuple{Any}" href="#ContextVariables.@contextvar-Tuple{Any}"><code>ContextVariables.@contextvar</code></a> — <span class="docstring-category">Macro</span></header><section><div><pre><code class="language-julia">@contextvar [local|global] var[::T] [= default]</code></pre><p>Declare a context variable named <code>var</code>.</p><div class="admonition is-warning"><header class="admonition-header">Warning</header><div class="admonition-body"><p>Context variables declared with <code>global</code> does not work with <code>Distributed</code>.</p></div></div><p><strong>Examples</strong></p><p>Top-level context variables needs to be declared in a package:</p><pre><code class="language-none">module MyPackage
+@contextvar cvar1
+@contextvar cvar2 = 1
+@contextvar cvar3::Int
+end</code></pre><p>Context variables can be declared in local scope by using <code>local</code> prefix:</p><pre><code class="language-julia-repl">julia&gt; using ContextVariables
+
+julia&gt; function demo()
+           @contextvar local x = 1
+           function f()
+               x[] += 1
+               return x[]
+           end
+           return f()
+       end;
+
+julia&gt; demo()
+2</code></pre><p>To use <code>@contextvar</code> in a non-package namespace like REPL, prefix the variable with <code>global</code>:</p><pre><code class="language-julia-repl">julia&gt; using ContextVariables
+
+julia&gt; @contextvar global X;
+
+julia&gt; X[] = 1;
+
+julia&gt; X[]
+1</code></pre></div><a class="docs-sourcelink" target="_blank" href="https://github.com/tkf/ContextVariables.jl/blob/0764ef839b4ef9f22e744adaeb2d296cbb9f4660/src/ContextVariables.jl#L224-L276">source</a></section></article></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="internals/">Internals »</a></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 10 May 2020 04:58">Sunday 10 May 2020</span>. Using Julia version 1.3.1.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
