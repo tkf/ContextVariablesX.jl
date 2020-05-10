@@ -61,7 +61,7 @@ end
 end
 
 @testset "doctest" begin
-    doctest(ContextVariables; manual = false)
+    doctest(ContextVariables)
 end
 
 end  # module

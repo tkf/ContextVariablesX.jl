@@ -1,6 +1,8 @@
 module ContextVariables
 
-export @contextvar, ContextVar, set!, set_context, with_context
+# Re-exporting `Base` functions so that Documenter knows what's public:
+export @contextvar,
+    ContextVar, delete!, get, getindex, set!, set_context, setindex!, with_context
 
 using IRTools: @dynamo, IR, recurse!
 using UUIDs: UUID, uuid4, uuid5
