@@ -7,6 +7,8 @@ Python (see also
 
 ## Tutorial
 
+### Basic usage
+
 Context variables can be used to manage task-local states that are
 inherited to child tasks.  Context variables are created by
 [`@contextvar`](@ref):
@@ -50,6 +52,8 @@ julia> x[]
 ERROR: KeyError: key ContextVar(:x) not found
 ```
 
+### Handling possibly-unassigned variables
+
 Use [`get`](@ref) and [`set!`](@ref) to handle context variables that may not be
 assigned:
 
@@ -73,6 +77,8 @@ x[] = some_value
 do_something()
 set!(x, old)  # rollback `x` to the previous state (may not be assigned)
 ```
+
+### Dynamic scoping
 
 [`with_context`](@ref) can be used to set multiple context variables at once,
 run a function in this context, and then rollback them to the original state:
@@ -154,6 +160,8 @@ julia> z[]
 0
 ```
 
+### Batch update
+
 Since setting multiple context variables at once is more efficient than setting
 them sequentially, [`set_context`](@ref) can be used to set multiple context
 variables in the current context in one go:
@@ -182,7 +190,9 @@ julia> x[]
 1
 ```
 
-Note that the context is inherited to the child task when the task is created.
+### Concurrent access
+
+The context is inherited to the child task when the task is created.
 Thus, changes made after `@async`/`@spawn` or changes made in other tasks are
 not observable:
 
@@ -228,6 +238,8 @@ data-race-free.
         end
     end
     ```
+
+### Function-local context variables
 
 Context variables local in a function can be created by prefixing the variable
 name with `local`:
