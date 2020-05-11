@@ -8,7 +8,7 @@ Python (see also
 ## Tutorial
 
 Context variables can be used to manage task-local states that are
-inherited to child tasks.  Context variables can be created by
+inherited to child tasks.  Context variables are created by
 [`@contextvar`](@ref):
 
 ```julia
@@ -228,6 +228,70 @@ data-race-free.
         end
     end
     ```
+
+Context variables local in a function can be created by prefixing the variable
+name with `local`:
+
+```jldoctest tutorial
+julia> function demo3()
+           @contextvar local x = 1
+           x[]
+       end;
+
+julia> demo3()
+1
+```
+
+If this context variable is mutated, it "remembers" the history of the calls
+made in the same task:
+
+```jldoctest tutorial
+julia> function demo4(n)
+           @contextvar local x = 1
+           @show x[]
+           x[] += 1
+           n > 1 ? demo4(n - 1) : nothing
+       end;
+
+julia> demo4(2)
+x[] = 1
+x[] = 2
+
+julia> demo4(1)
+x[] = 3
+```
+
+Since the local context variables cannot be accessed outside of the function, the
+only way to remove it from the storage outside of the function is
+[`reset_context`](@ref):
+
+```jldoctest tutorial
+julia> reset_context()
+
+julia> demo4(1)
+x[] = 1
+```
+
+Like normal context variables, the local context variables propagate to child
+tasks.  However, they do not propagate to the parent or siblings:
+
+```jldoctest tutorial
+julia> demo4(1)
+x[] = 2
+
+julia> with_context() do  #  with_context required for IRTools used for PoC
+           @sync @async demo4(1)
+       end;
+x[] = 3
+
+julia> with_context() do
+           @sync @async demo4(1)
+       end;
+x[] = 3
+
+julia> demo4(1)
+x[] = 3
+```
 
 ## Reference
 

@@ -482,11 +482,14 @@ snapshot_context() = ContextSnapshot(get_task_ctxvars())
 
 """
     reset_context(snapshot::ContextSnapshot)
+    reset_context()
 
 Rest the entire context of the current task to the state at which `snapshot`
 is obtained via [`snapshot_context`](@ref).
 """
 reset_context(snapshot::ContextSnapshot) = set_task_ctxvars(snapshot.vars)
+reset_context() = set_task_ctxvars(nothing)
+
 set_context(snapshot::ContextSnapshot) = set_context(snapshot.vars)
 
 end # module
