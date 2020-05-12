@@ -34,7 +34,8 @@ julia> @contextvar global x;
     packages make it impossible to work with serialization-based libraries
     such as Distributed.
 
-The value of context variable can be get and set with the indexing syntax `[]`
+You can be get and set the value of context variable with the indexing
+syntax `[]`
 
 ```jldoctest tutorial
 julia> x[] = 1;
@@ -123,7 +124,7 @@ get(z) = nothing
 Thus,
 
 ```julia
-with_context(x => Some(a), y => Some(b), z => Some(c)) do
+with_context(x => Some(a), y => nothing) do
     ...
 end
 ```
@@ -131,7 +132,7 @@ end
 can be used considered as a dynamically scoped version of
 
 ```julia
-let x′ = a, y′ = b, z′ = c
+let x′ = a, y′
     ...
 end
 ```
@@ -238,6 +239,59 @@ data-race-free.
         end
     end
     ```
+
+### Namespace
+
+Consider packages and modules with the same variable name:
+
+```julia
+module PackageA
+    @contextvar x = 1
+    module SubModule
+        @contextvar x = 2
+    end
+end
+```
+
+and
+
+```julia
+module PackageB
+    @contextvar x = 3
+end
+```
+
+When these packages are loaded, there are three _distinct_ context variables
+`PackageA.x`, `PackageA.SubModule.x`, and `PackageB.x` that can be manipulated
+independently.
+
+This is simply because `@contextvar` creates independent variable "instance"
+in each context.  It can be demonstrated easily in the REPL:
+
+```jldoctest tutorial; filter = r"(^(.*?\.)?x)|(\[.*?\])"
+julia> @contextvar global x;
+
+julia> a = x
+Main.x :: ContextVar [4630fcbd-7f5b-4094-916a-f3b33acf4453] (not assigned)
+
+julia> @contextvar global x;
+
+julia> b = x
+Main.x :: ContextVar [f6a7639c-3b33-414e-98bc-504b40a48cb8] (not assigned)
+
+julia> a != b
+true
+
+julia> a[] = 1;
+
+julia> b[] = 2;
+
+julia> a
+Main.x :: ContextVar [4630fcbd-7f5b-4094-916a-f3b33acf4453] => 1
+
+julia> b
+Main.x :: ContextVar [f6a7639c-3b33-414e-98bc-504b40a48cb8] => 2
+```
 
 ### Function-local context variables
 
