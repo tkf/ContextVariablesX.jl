@@ -224,7 +224,12 @@ end
 """
     @contextvar [local|global] var[::T] [= default]
 
-Declare a context variable named `var`.
+Declare a context variable named `var`.  The type constraint `::T` and
+the default value `= default` are optional.  If the default value is given
+without the type constraint `::T`, its type `T = typeof(default)` is used.
+
+`@contextvar` without `local` and `global` prefixes can only be used at the
+top-level scope of packages with valid UUID.
 
 !!! warning
 
@@ -234,7 +239,7 @@ Declare a context variable named `var`.
 
 Top-level context variables needs to be declared in a package:
 
-```
+```julia
 module MyPackage
 @contextvar cvar1
 @contextvar cvar2 = 1

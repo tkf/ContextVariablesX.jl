@@ -339,7 +339,7 @@ x[] = 1
 ```
 
 Like normal context variables, the local context variables propagate to child
-tasks.  However, they do not propagate to the parent or siblings:
+tasks.
 
 ```jldoctest tutorial
 julia> demo4(1)
