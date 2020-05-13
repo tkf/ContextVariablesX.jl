@@ -107,7 +107,7 @@ julia> z[]
 
 Note that `with_context(f, x => nothing, ...)` clears the value of
 `x`, rather than setting the value of `x` to `nothing`.  Use
-`Some(nothing)` set `nothing`.  Similar caution applies to
+`Some(nothing)` to set `nothing`.  Similar caution applies to
 `set_context` (see below).
 
 ```jldoctest tutorial
@@ -124,7 +124,7 @@ get(z) = nothing
 Thus,
 
 ```julia
-with_context(x => Some(a), y => nothing) do
+with_context(x => Some(a), y => Some(b), z => nothing) do
     ...
 end
 ```
@@ -132,7 +132,7 @@ end
 can be used considered as a dynamically scoped version of
 
 ```julia
-let x′ = a, y′
+let x′ = a, y′ = b, z′
     ...
 end
 ```
