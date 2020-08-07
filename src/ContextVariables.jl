@@ -1,22 +1,12 @@
 module ContextVariables
 
 # Re-exporting `Base` functions so that Documenter knows what's public:
-export @contextvar,
-    ContextVar,
-    delete!,
-    get,
-    getindex,
-    reset_context,
-    set!,
-    set_context,
-    setindex!,
-    snapshot_context,
-    with_context
+export @contextvar, ContextVar, get, getindex, snapshot_context, with_context
 
-using IRTools: @dynamo, IR, IRTools, recurse!
+using Logging: AbstractLogger, Logging, current_logger, with_logger
 using UUIDs: UUID, uuid4, uuid5
 
-const CVKEY = UUID("30c48ab6-eb66-4e00-8274-c879a8246cdb")
+include("payloadlogger.jl")
 
 function _ContextVar end
 
@@ -28,8 +18,8 @@ function _ContextVar end
 
 Context variable type.  This is the type of the object `var` created by
 [`@contextvar var`](@ref @contextvar).  This acts as a reference to the
-value stored in a task-local.  The macro `@contextvar` is the only public
-API to construct this object.
+value stored in a task-local context.  The macro `@contextvar` is the only
+public API to construct this object.
 
 !!! warning
 
@@ -116,7 +106,9 @@ end
 
     This is not a public API.  This documentation is for making it easier to
     experiment with different implementations of the context variable storage
-    backend, by monkey-patching it at run-time.
+    backend, by monkey-patching it at run-time.  When this function is
+    monkey-patched, `ctxvars_type` should also be monkey-patched to return
+    the type `T`.
 
 The first argument `ctx` is either `nothing` or a dict-like object of type `T` where
 its `keytype` is `UUID` and `valtype` is `Any`.  The second argument `kvs` is an
@@ -134,7 +126,7 @@ function merge_ctxvars(ctx, kvs)
         return ctx
     else
         # Copy-or-create-on-write:
-        vars = ctx === nothing ? Dict{UUID,Any}() : copy(ctx)
+        vars = ctx === nothing ? ctxvars_type()() : copy(ctx)
         for (k, v) in kvs
             if v === nothing
                 delete!(vars, k)
@@ -147,8 +139,18 @@ function merge_ctxvars(ctx, kvs)
     end
 end
 
-get_task_ctxvars() = get(task_local_storage(), CVKEY, nothing)
-set_task_ctxvars(ctx) = task_local_storage(CVKEY, ctx)
+ctxvars_type() = Dict{UUID,Any}
+_ctxvars_type() = Union{Nothing,ctxvars_type()}
+get_task_ctxvars() = _get_task_ctxvars()::_ctxvars_type()
+
+new_merged_ctxvars(kvs) =
+    merge_ctxvars(
+        get_task_ctxvars(),
+        (
+            k.key => v === nothing ? v : Some(convert(eltype(k), something(v)))
+            for (k, v) in kvs
+        ),
+    )::_ctxvars_type()
 
 struct _NoValue end
 
@@ -182,21 +184,6 @@ function Base.getindex(var::ContextVar{T}) where {T}
     maybe = get(var)
     maybe === nothing && throw(KeyError(var))
     return something(maybe)::T
-end
-
-Base.setindex!(var::ContextVar, value) = set!(var, Some(value))
-Base.delete!(var::ContextVar) = set!(var, nothing)
-
-"""
-    set!(var::ContextVar, Some(value))
-    set!(var::ContextVar, nothing)
-
-Set the value of context variable `var` to `value` or delete it.
-"""
-function set!(var::ContextVar{T}, value::Union{Some,Nothing}) where {T}
-    value = convert(Union{Some{T},Nothing}, value)
-    set_task_ctxvars(merge_ctxvars(get_task_ctxvars(), (var.key => value,)))
-    return var
 end
 
 """
@@ -245,38 +232,6 @@ module MyPackage
 @contextvar cvar2 = 1
 @contextvar cvar3::Int
 end
-```
-
-Context variables can be declared in local scope by using `local` prefix:
-
-```jldoctest
-julia> using ContextVariables
-
-julia> function demo()
-           @contextvar local x = 1
-           function f()
-               x[] += 1
-               return x[]
-           end
-           return f()
-       end;
-
-julia> demo()
-2
-```
-
-To use `@contextvar` in a non-package namespace like REPL, prefix the variable
-with `global`:
-
-```jldoctest global_vars
-julia> using ContextVariables
-
-julia> @contextvar global X;
-
-julia> X[] = 1;
-
-julia> X[]
-1
 ```
 """
 macro contextvar(ex0)
@@ -335,28 +290,6 @@ macro contextvar(ex0)
     )
 end
 
-@dynamo function propagate_variables(args...)
-    ir = IR(args...)
-    ir === nothing && return
-    recurse!(ir)
-    return ir
-end
-
-# Workaround IRTools bugs(?):
-propagate_variables(f::Union{
-    typeof(schedule),  # "this intrinsic must be compiled to be called"
-    typeof(Base.sync_end),  # "IRTools.Inner.Undefined()"
-}, args...) = f(args...)
-
-function propagate_variables(::Type{<:Task}, f, args...)
-    vars = get_task_ctxvars()
-    function wrapper()
-        set_task_ctxvars(vars)
-        f()
-    end
-    return Task(wrapper, args...)
-end
-
 """
     with_context(f, var1 => value1, var2 => value2, ...)
     with_context(f, pairs)
@@ -398,77 +331,9 @@ end
 
 are not equivalent.
 """
-function with_context(f, args...)
-    with_context_impl(args...) do
-        propagate_variables(f)
-    end
-end
-
-function with_context_impl(f, kvs::Pair{<:ContextVar}...)
-    orig = map(((k, _),) -> k => get(k), kvs)
-    set_context(kvs)
-    try
-        return f()
-    finally
-        set_context(orig)
-    end
-end
-
-function with_context_impl(f, ::Nothing)
-    ctx = get_task_ctxvars()
-    try
-        set_task_ctxvars(nothing)
-        return f()
-    finally
-        set_task_ctxvars(ctx)
-    end
-end
-
-# Not using `set_context!` so that `snapshot` as an input makes sense.
-"""
-    set_context(var1 => value1, var2 => value2, ...)
-    set_context(pairs)
-    set_context(snapshot::ContextSnapshot)
-
-Equivalent to `var1[] = value1`, `var2[] = value2`, and so on.  The second form
-expect an iterable of pairs of context variable and values.  This function is
-more efficient than setting individual context variables sequentially.  Like
-[`with_context`](@ref), `nothing` value means to clear the context variable
-and `Some` is always unwrapped.
-
-A "snapshot" of the context returned from [`snapshot_context`](@ref) can
-be specified as an input (the third form).
-
-# Examples
-```jldoctest
-julia> using ContextVariables
-
-julia> @contextvar global x
-       @contextvar global y;
-
-julia> set_context(x => 1, y => 2)
-
-julia> x[]
-1
-
-julia> y[]
-2
-
-julia> set_context([x => 10, y => 20])
-
-julia> x[]
-10
-
-julia> y[]
-20
-```
-"""
-set_context(kvs::Pair{<:ContextVar}...) = set_context(kvs)
-function set_context(kvs)
-    ctx = merge_ctxvars(get_task_ctxvars(), (k.key => v for (k, v) in kvs))
-    set_task_ctxvars(ctx)
-    return
-end
+with_context
+with_context(f, kvs::Pair{<:ContextVar}...) = with_task_ctxvars(f, new_merged_ctxvars(kvs))
+with_context(f, ::Nothing) = with_task_ctxvars(f, nothing)
 
 struct ContextSnapshot{T}
     vars::T
@@ -480,21 +345,11 @@ end
 """
     snapshot_context() -> snapshot::ContextSnapshot
 
-Get a snapshot of a context that can be passed to [`reset_context`](@ref) to
-rewind all changes in the context variables.
+Get a snapshot of a context that can be passed to [`with_context`](@ref) to
+run a function inside the current context at later time.
 """
 snapshot_context() = ContextSnapshot(get_task_ctxvars())
 
-"""
-    reset_context(snapshot::ContextSnapshot)
-    reset_context()
-
-Rest the entire context of the current task to the state at which `snapshot`
-is obtained via [`snapshot_context`](@ref).
-"""
-reset_context(snapshot::ContextSnapshot) = set_task_ctxvars(snapshot.vars)
-reset_context() = set_task_ctxvars(nothing)
-
-set_context(snapshot::ContextSnapshot) = set_context(snapshot.vars)
+with_context(f, snapshot::ContextSnapshot) = with_task_ctxvars(f, snapshot.vars)
 
 end # module
