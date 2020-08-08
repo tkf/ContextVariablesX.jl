@@ -4,7 +4,13 @@ module ContextVariablesX
 export @contextvar, ContextVar, get, getindex, snapshot_context, with_context
 
 using Logging: AbstractLogger, Logging, current_logger, with_logger
-using UUIDs: UUID, uuid4, uuid5
+using UUIDs: UUID, UUIDs, uuid4
+
+if isdefined(UUIDs, :uuid5)
+    using UUIDs: uuid5
+else
+    using Compat: uuid5
+end
 
 include("payloadlogger.jl")
 
