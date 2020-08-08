@@ -187,17 +187,14 @@ function Base.getindex(var::ContextVar{T}) where {T}
 end
 
 """
-    genkey(__module__::Module, varname::Symbol) -> UUID
+    genkey(__module__::Module, varname::Symbol) -> Union{UUID,Nothing}.
 
 Generate a stable UUID for a context variable `__module__.\$varname`.
 """
 function genkey(__module__::Module, varname::Symbol)
     pkgid = Base.PkgId(__module__)
     if pkgid.uuid === nothing
-        throw(ArgumentError(
-            "Module `$__module__` is not a part of a package. " *
-            "`@contextvar` can only be used inside a package.",
-        ))
+        return nothing
     end
     fullpath = push!(collect(fullname(__module__)), varname)
     if any(x -> contains(string(x), "."), fullpath)
@@ -209,18 +206,16 @@ function genkey(__module__::Module, varname::Symbol)
 end
 
 """
-    @contextvar [local|global] var[::T] [= default]
+    @contextvar var[::T] [= default]
 
 Declare a context variable named `var`.  The type constraint `::T` and
 the default value `= default` are optional.  If the default value is given
 without the type constraint `::T`, its type `T = typeof(default)` is used.
 
-`@contextvar` without `local` and `global` prefixes can only be used at the
-top-level scope of packages with valid UUID.
-
 !!! warning
 
-    Context variables declared with `global` does not work with `Distributed`.
+    Context variables defined outside a proper package does not work
+    with `Distributed`.
 
 # Examples
 
@@ -236,16 +231,6 @@ end
 """
 macro contextvar(ex0)
     ex = ex0
-    qualifier = :const
-    if Meta.isexpr(ex, :local)
-        length(ex.args) != 1 && throw(ArgumentError("Malformed input:\n$ex0"))
-        ex, = ex.args
-        qualifier = :local
-    elseif Meta.isexpr(ex, :global)
-        length(ex.args) != 1 && throw(ArgumentError("Malformed input:\n$ex0"))
-        ex, = ex.args
-        qualifier = :global
-    end
     if Meta.isexpr(ex, :(=))
         length(ex.args) != 2 && throw(ArgumentError("Unsupported syntax:\n$ex0"))
         ex, default = ex.args
@@ -273,9 +258,16 @@ macro contextvar(ex0)
         end
     end
     varname = QuoteNode(ex)
-    if qualifier === :const
-        key = genkey(__module__, ex)
-    else
+    key = genkey(__module__, ex)
+    if key === nothing
+        if isinteractive() && _WARN_DYNAMIC_KEY[]
+            @warn (
+                "Using `@contextvar` outside a package is discouraged except" *
+                " for interactive exploration or quick scripts.  Context" *
+                " variables created outside a proper package do not have " *
+                " consistent ID and cannot be used with `Distributed`."
+            ) maxlog=1
+        end
         # Creating a UUID at macro expansion time because:
         # * It would be a memory leak it were created at run-time because
         #   context variable storage can be filled with UUIDs created at
@@ -285,10 +277,13 @@ macro contextvar(ex0)
         key = uuid4()
     end
     return Expr(
-        qualifier,
+        :const,
         :($(esc(ex)) = _ContextVar($varname, $__module__, $key, $(args...))),
     )
 end
+
+# A hack to make doctest easier
+const _WARN_DYNAMIC_KEY = Ref(true)
 
 """
     with_context(f, var1 => value1, var2 => value2, ...)

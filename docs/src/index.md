@@ -26,6 +26,7 @@ in REPL, you can prefix the variable name with `global`:
 ```@meta
 DocTestSetup = quote
     using ContextVariables
+    ContextVariables._WARN_DYNAMIC_KEY[] = false
     function display(x)
         show(stdout, "text/plain", x)
         println()
@@ -34,15 +35,15 @@ end
 ```
 
 ```jldoctest tutorial
-julia> @contextvar global x::Any = 1;
+julia> @contextvar x::Any = 1;
 ```
 
 !!! warning
 
-    `@contextvar global` should be used only for interactive exploration,
-    quick scripting, and testing.  Using `@contextvar global` inside
-    packages make it impossible to work with serialization-based libraries
-    such as Distributed.
+    `@contextvar` outside a proper package should be used only for
+    interactive exploration, quick scripting, and testing.  Using
+    `@contextvar` outside packages make it impossible to work with
+    serialization-based libraries such as Distributed.
 
 You can be get a context variable with indexing syntax `[]`
 
@@ -68,9 +69,11 @@ julia> with_context(x => 100) do
 run a function in this context, and then rollback them to the original state:
 
 ```jldoctest tutorial
-julia> @contextvar global y = 1;
-       @contextvar global z::Int;
+julia> @contextvar y = 1;
+       @contextvar z::Int;
+```
 
+```jldoctest tutorial
 julia> function demo1()
            @show x[]
            @show y[]
@@ -200,52 +203,54 @@ data-race-free.
 
 ### Namespace
 
-Consider packages and modules with the same variable name:
+Consider "packages" and modules with the same variable name:
 
-```julia
-module PackageA
-    @contextvar x = 1
-    module SubModule
-        @contextvar x = 2
-    end
-end
+```jldoctest tutorial
+julia> module PackageA
+           using ContextVariables
+           @contextvar x = 1
+           module SubModule
+               using ContextVariables
+               @contextvar x = 2
+           end
+       end;
+
+julia> module PackageB
+           using ContextVariables
+           @contextvar x = 3
+       end;
 ```
 
-and
-
-```julia
-module PackageB
-    @contextvar x = 3
-end
-```
-
-When these packages are loaded, there are three _distinct_ context variables
-`PackageA.x`, `PackageA.SubModule.x`, and `PackageB.x` that can be manipulated
-independently.
+These packages define are three _distinct_ context variables
+`PackageA.x`, `PackageA.SubModule.x`, and `PackageB.x` that can be
+manipulated independently.
 
 This is simply because `@contextvar` creates independent variable "instance"
 in each context.  It can be demonstrated easily in the REPL:
 
 ```jldoctest tutorial; filter = r"(^(.*?\.)?x)|(\[.*?\])"m
-julia> @contextvar global x;
+julia> PackageA.x
+Main.PackageA.x :: ContextVar [668bafe1-c075-48ae-a52d-13543cf06ddb] => 1
 
-julia> a = x
-Main.x :: ContextVar [4630fcbd-7f5b-4094-916a-f3b33acf4453] (not assigned)
+julia> PackageA.SubModule.x
+Main.PackageA.SubModule.x :: ContextVar [0549256b-1914-4fcd-ac8e-33f377be816e] => 2
 
-julia> @contextvar global x;
+julia> PackageB.x
+Main.PackageB.x :: ContextVar [ddd3358e-a77f-44c0-be28-e5dde929c6f5] => 3
 
-julia> b = x
-Main.x :: ContextVar [f6a7639c-3b33-414e-98bc-504b40a48cb8] (not assigned)
+julia> (PackageA.x[], PackageA.SubModule.x[], PackageB.x[])
+(1, 2, 3)
 
-julia> a != b
-true
-
-julia> with_context(a => 1, b => 2) do
-           display(a)
-           display(b)
+julia> with_context(PackageA.x => 10, PackageA.SubModule.x => 20, PackageB.x => 30) do
+           display(PackageA.x)
+           display(PackageA.SubModule.x)
+           display(PackageB.x)
+           (PackageA.x[], PackageA.SubModule.x[], PackageB.x[])
        end
-Main.x :: ContextVar [4630fcbd-7f5b-4094-916a-f3b33acf4453] => 1
-Main.x :: ContextVar [f6a7639c-3b33-414e-98bc-504b40a48cb8] => 2
+Main.PackageA.x :: ContextVar [668bafe1-c075-48ae-a52d-13543cf06ddb] => 10
+Main.PackageA.SubModule.x :: ContextVar [0549256b-1914-4fcd-ac8e-33f377be816e] => 20
+Main.PackageB.x :: ContextVar [ddd3358e-a77f-44c0-be28-e5dde929c6f5] => 30
+(10, 20, 30)
 ```
 
 ```@meta

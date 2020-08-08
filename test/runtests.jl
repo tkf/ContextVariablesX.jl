@@ -4,9 +4,10 @@ using Documenter: doctest
 using ContextVariables
 using Test
 
-@contextvar global cvar1 = 42
-@contextvar global cvar2::Int
-@contextvar global cvar3
+@contextvar cvar1 = 42
+@contextvar cvar2::Int
+@contextvar cvar3
+@contextvar cvar4::Union{Missing,Int64} = 1
 
 @testset "typed, w/ default" begin
     ok = Ref(0)
@@ -56,10 +57,7 @@ end
     @test endswith(sprint(show, cvar1), "ContextVar(:cvar1, 42)")
     @test endswith(sprint(show, cvar2), "ContextVar{$Int}(:cvar2)")
     @test endswith(sprint(show, cvar3), "ContextVar(:cvar3)")
-    @test endswith(
-        sprint(show, @contextvar local x::Union{Missing,Int64} = 1),
-        "ContextVar{Union{Missing, Int64}}(:x, 1)",
-    )
+    @test endswith(sprint(show, cvar4), "ContextVar{Union{Missing, Int64}}(:cvar4, 1)")
 end
 
 @testset "doctest" begin
