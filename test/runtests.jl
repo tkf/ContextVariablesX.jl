@@ -1,7 +1,7 @@
-module TestContextVariables
+module TestContextVariablesX
 
 using Documenter: doctest
-using ContextVariables
+using ContextVariablesX
 using Test
 
 @contextvar cvar1 = 42
@@ -61,7 +61,7 @@ end
 end
 
 @testset "doctest" begin
-    doctest(ContextVariables)
+    doctest(ContextVariablesX)
 end
 
 end  # module

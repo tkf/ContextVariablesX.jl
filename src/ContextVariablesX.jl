@@ -1,4 +1,4 @@
-module ContextVariables
+module ContextVariablesX
 
 # Re-exporting `Base` functions so that Documenter knows what's public:
 export @contextvar, ContextVar, get, getindex, snapshot_context, with_context

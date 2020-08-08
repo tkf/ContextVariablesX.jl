@@ -1,6 +1,6 @@
 # Internals
 
 ```@autodocs
-Modules = [ContextVariables]
+Modules = [ContextVariablesX]
 Public = false
 ```

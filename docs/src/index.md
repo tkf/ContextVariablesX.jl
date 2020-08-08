@@ -1,6 +1,6 @@
-# ContextVariables.jl
+# ContextVariablesX.jl
 
-ContextVariables.jl is heavily inspired by
+ContextVariablesX.jl is heavily inspired by
 [`contextvars`](https://docs.python.org/3/library/contextvars.html) in
 Python (see also
 [PEP 567](https://www.python.org/dev/peps/pep-0567/)).
@@ -25,8 +25,8 @@ in REPL, you can prefix the variable name with `global`:
 
 ```@meta
 DocTestSetup = quote
-    using ContextVariables
-    ContextVariables._WARN_DYNAMIC_KEY[] = false
+    using ContextVariablesX
+    ContextVariablesX._WARN_DYNAMIC_KEY[] = false
     function display(x)
         show(stdout, "text/plain", x)
         println()
@@ -207,16 +207,16 @@ Consider "packages" and modules with the same variable name:
 
 ```jldoctest tutorial
 julia> module PackageA
-           using ContextVariables
+           using ContextVariablesX
            @contextvar x = 1
            module SubModule
-               using ContextVariables
+               using ContextVariablesX
                @contextvar x = 2
            end
        end;
 
 julia> module PackageB
-           using ContextVariables
+           using ContextVariablesX
            @contextvar x = 3
        end;
 ```
@@ -260,6 +260,6 @@ DocTestSetup = nothing
 ## Reference
 
 ```@autodocs
-Modules = [ContextVariables]
+Modules = [ContextVariablesX]
 Private = false
 ```

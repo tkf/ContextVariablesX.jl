@@ -1,10 +1,10 @@
 using Documenter
-using ContextVariables
+using ContextVariablesX
 
 makedocs(
-    sitename = "ContextVariables",
+    sitename = "ContextVariablesX",
     format = Documenter.HTML(),
-    modules = [ContextVariables],
+    modules = [ContextVariablesX],
 )
 
-deploydocs(; repo = "github.com/tkf/ContextVariables.jl", push_preview = true)
+deploydocs(; repo = "github.com/tkf/ContextVariablesX.jl", push_preview = true)
