@@ -203,7 +203,7 @@ function genkey(__module__::Module, varname::Symbol)
         return nothing
     end
     fullpath = push!(collect(fullname(__module__)), varname)
-    if any(x -> contains(string(x), "."), fullpath)
+    if any(x -> occursin(".", string(x)), fullpath)
         throw(ArgumentError(
             "Modules and variable names must not contain a dot:\n" * join(fullpath, "\n"),
         ))
