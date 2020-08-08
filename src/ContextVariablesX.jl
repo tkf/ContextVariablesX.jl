@@ -198,15 +198,15 @@ end
 Generate a stable UUID for a context variable `__module__.\$varname`.
 """
 function genkey(__module__::Module, varname::Symbol)
-    pkgid = Base.PkgId(__module__)
-    if pkgid.uuid === nothing
-        return nothing
-    end
     fullpath = push!(collect(fullname(__module__)), varname)
     if any(x -> occursin(".", string(x)), fullpath)
         throw(ArgumentError(
             "Modules and variable names must not contain a dot:\n" * join(fullpath, "\n"),
         ))
+    end
+    pkgid = Base.PkgId(__module__)
+    if pkgid.uuid === nothing
+        return nothing
     end
     return uuid5(pkgid.uuid, join(fullpath, '.'))
 end

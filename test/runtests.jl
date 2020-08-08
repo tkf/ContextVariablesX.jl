@@ -60,6 +60,18 @@ end
     @test endswith(sprint(show, cvar4), "ContextVar{Union{Missing, Int64}}(:cvar4, 1)")
 end
 
+@testset "invalid name" begin
+    name = Symbol("name.with.dots")
+    err = try
+        @eval @contextvar $name
+        nothing
+    catch err_
+        err_
+    end
+    @test err isa Exception
+    @test occursin("Modules and variable names must not contain a dot", sprint(showerror, err))
+end
+
 @testset "doctest" begin
     doctest(ContextVariablesX)
 end
