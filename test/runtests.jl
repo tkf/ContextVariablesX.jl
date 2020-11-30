@@ -72,6 +72,26 @@ end
     @test occursin("Modules and variable names must not contain a dot", sprint(showerror, err))
 end
 
+@testset "logging: keyword argument" begin
+    logs, _ = Test.collect_test_logs() do
+        @sync @async begin
+            with_context() do
+                try
+                    error(1)
+                catch err
+                    @error "hello" exception = (err, catch_backtrace())
+                end
+            end
+        end
+    end
+    l, = logs
+    @test l.message == "hello"
+    @test haskey(l.kwargs, :exception)
+    exception = l.kwargs[:exception]
+    @test exception isa Tuple{Exception,typeof(catch_backtrace())}
+    @test exception[1] == ErrorException("1")
+end
+
 @testset "doctest" begin
     doctest(ContextVariablesX)
 end

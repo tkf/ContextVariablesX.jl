@@ -20,8 +20,8 @@ function with_task_ctxvars(f, ctx)
 end
 
 # Forward actual logging interface:
-Logging.handle_message(payload::ContextPayloadLogger, args...) =
-    Logging.handle_message(payload.logger, args...)
+Logging.handle_message(payload::ContextPayloadLogger, args...; kwargs...) =
+    Logging.handle_message(payload.logger, args...; kwargs...)
 Logging.shouldlog(payload::ContextPayloadLogger, args...) =
     Logging.shouldlog(payload.logger, args...)
 Logging.min_enabled_level(payload::ContextPayloadLogger, args...) =
