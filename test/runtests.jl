@@ -92,6 +92,18 @@ end
     @test exception[1] == ErrorException("1")
 end
 
+@testset "with_logger" begin
+    logger = Test.TestLogger()
+    with_context(cvar1 => 111) do
+        ContextVariablesX.with_logger(logger) do
+            @test cvar1[] == 111
+            @info "hello"
+        end
+    end
+    l, = logger.logs
+    @test l.message == "hello"
+end
+
 @testset "doctest" begin
     doctest(ContextVariablesX)
 end
