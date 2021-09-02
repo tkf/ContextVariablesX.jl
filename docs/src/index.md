@@ -266,4 +266,5 @@ Private = false
 
 ```@docs
 ContextVariablesX.with_logger
+ContextVariablesX.current_logger
 ```

@@ -3,11 +3,8 @@ struct ContextPayloadLogger <: AbstractLogger
     ctxvars::Any
 end
 
-ContextPayloadLogger(logger::ContextPayloadLogger, ctxvars) =
-    ContextPayloadLogger(logger.logger, ctxvars)
-
 function _get_task_ctxvars()
-    logger = current_logger()
+    logger = Logging.current_logger()
     if logger isa ContextPayloadLogger
         return logger.ctxvars
     end
@@ -36,11 +33,25 @@ Like `Logging.with_logger` but properly propagate the context variables.
 """
 function with_logger(f, logger::AbstractLogger)
     @nospecialize
-    cpl = current_logger()
+    cpl = Logging.current_logger()
     if cpl isa ContextPayloadLogger
         ctx = cpl.ctxvars
     else
         ctx = nothing
     end
     return Logging.with_logger(f, ContextPayloadLogger(logger, ctx))
+end
+
+"""
+    ContextVariablesX.current_logger() -> logger::AbstractLogger
+
+Like `Logging.current_logger` but unwraps `ContextPayloadLogger`.
+"""
+function current_logger()
+    logger = Logging.current_logger()
+    if logger isa ContextPayloadLogger
+        return logger.logger
+    else
+        return logger
+    end
 end

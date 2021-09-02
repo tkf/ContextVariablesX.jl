@@ -96,6 +96,7 @@ end
     logger = Test.TestLogger()
     with_context(cvar1 => 111) do
         ContextVariablesX.with_logger(logger) do
+            @test ContextVariablesX.current_logger() isa Test.TestLogger
             @test cvar1[] == 111
             @info "hello"
         end
