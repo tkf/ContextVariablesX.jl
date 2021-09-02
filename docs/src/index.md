@@ -263,3 +263,7 @@ DocTestSetup = nothing
 Modules = [ContextVariablesX]
 Private = false
 ```
+
+```@docs
+ContextVariablesX.with_logger
+```

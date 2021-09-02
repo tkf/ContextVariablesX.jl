@@ -16,7 +16,7 @@ end
 
 function with_task_ctxvars(f, ctx)
     @nospecialize
-    return with_logger(f, ContextPayloadLogger(current_logger(), ctx))
+    return Logging.with_logger(f, ContextPayloadLogger(current_logger(), ctx))
 end
 
 # Forward actual logging interface:
@@ -28,3 +28,19 @@ Logging.min_enabled_level(payload::ContextPayloadLogger, args...) =
     Logging.min_enabled_level(payload.logger, args...)
 Logging.catch_exceptions(payload::ContextPayloadLogger, args...) =
     Logging.catch_exceptions(payload.logger, args...)
+
+"""
+    ContextVariablesX.with_logger(f, logger::AbstractLogger)
+
+Like `Logging.with_logger` but properly propagate the context variables.
+"""
+function with_logger(f, logger::AbstractLogger)
+    @nospecialize
+    cpl = current_logger()
+    if cpl isa ContextPayloadLogger
+        ctx = cpl.ctxvars
+    else
+        ctx = nothing
+    end
+    return Logging.with_logger(f, ContextPayloadLogger(logger, ctx))
+end
